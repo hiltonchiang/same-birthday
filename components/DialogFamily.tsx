@@ -155,11 +155,14 @@ const DialogFamily: React.FC<DialogFamilyProps> = ({ onDialogClosed }) => {
     }
   }
 
-  const handleExitButton = async () => {
+  const handleBackButton = async () => {
     setOpenRadio(false)
     setOpenLogIn(true)
   }
-
+  const handleExitButton = async () => {
+    setOpenRadio(false)
+    setOpenLogIn(false)
+  }
   function ResultLogIn() {
     if (pswdWrong === true) {
       return (
@@ -472,11 +475,22 @@ const DialogFamily: React.FC<DialogFamilyProps> = ({ onDialogClosed }) => {
                 <button
                   type="button"
                   id="submitButton"
-                  onClick={handleExitButton}
+                  onClick={handleBackButton}
                   className={clsExit}
                 >
                   回前頁
                 </button>
+                <button
+                  type="button"
+                  id="submitButton"
+                  onClick={() => {
+                    window.location.href = '/'
+                  }}
+                  className={clsNext}
+                >
+                  回首頁
+                </button>
+
                 <div className="mx-auto flex size-12 shrink-0 items-center justify-center rounded-full bg-lime-500/10 sm:mx-0 sm:size-10">
                   <span>{totalTarget}</span>
                 </div>
