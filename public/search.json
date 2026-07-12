@@ -1,0 +1,16 @@
+[
+  {
+    "title": "同天生日機率",
+    "slug": "same-birtyday",
+    "summary": "一羣人中同天生日的機率",
+    "date": "2026-06-28T00:00:00.000Z",
+    "tags": [
+      "prose"
+    ],
+    "authors": [
+      "hilton"
+    ],
+    "image": "/static/images/socialbanner.png",
+    "path": "blog/same-birtyday"
+  }
+]

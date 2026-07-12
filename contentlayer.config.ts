@@ -1,0 +1,207 @@
+// contentlayer.config.ts
+import { defineDocumentType, ComputedFields, makeSource } from 'contentlayer2/source-files'
+import { writeFileSync } from 'fs'
+import readingTime from 'reading-time'
+import { slug } from 'github-slugger'
+import path from 'path'
+import { fromHtmlIsomorphic } from 'hast-util-from-html-isomorphic'
+// Remark packages
+import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import { remarkAlert } from 'remark-github-blockquote-alert'
+import {
+  remarkExtractFrontmatter,
+  remarkCodeTitles,
+  remarkImgToJsx,
+  extractTocHeadings,
+} from 'pliny/mdx-plugins/index.js'
+// Rehype packages
+import rehypeSlug from 'rehype-slug'
+import rehypeAutolinkHeadings from 'rehype-autolink-headings'
+import rehypeKatex from 'rehype-katex'
+import rehypeKatexNoTranslate from 'rehype-katex-notranslate'
+import rehypeCitation from 'rehype-citation'
+import rehypePrismPlus from 'rehype-prism-plus'
+import rehypePresetMinify from 'rehype-preset-minify'
+import siteMetadata from './data/siteMetadata'
+import { allCoreContent, sortPosts } from 'pliny/utils/contentlayer.js'
+import rehypeMermaid from './rehypeMermaid'
+import rehypePrettyCode, { type Options } from "rehype-pretty-code";
+
+const prettyCodeOptions: Partial<Options> = {
+   theme: {
+     light: "catppuccin-latte",
+     dark: "github-dark",
+   },
+   bypassInlineCode: true,
+ };
+
+const root = process.cwd()
+const isProduction = process.env.NODE_ENV === 'production'
+
+// heroicon mini link
+const icon = fromHtmlIsomorphic(
+  `
+  <span class="content-header-link">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 linkicon">
+  <path d="M12.232 4.232a2.5 2.5 0 0 1 3.536 3.536l-1.225 1.224a.75.75 0 0 0 1.061 1.06l1.224-1.224a4 4 0 0 0-5.656-5.656l-3 3a4 4 0 0 0 .225 5.865.75.75 0 0 0 .977-1.138 2.5 2.5 0 0 1-.142-3.667l3-3Z" />
+  <path d="M11.603 7.963a.75.75 0 0 0-.977 1.138 2.5 2.5 0 0 1 .142 3.667l-3 3a2.5 2.5 0 0 1-3.536-3.536l1.225-1.224a.75.75 0 0 0-1.061-1.06l-1.224 1.224a4 4 0 1 0 5.656 5.656l3-3a4 4 0 0 0-.225-5.865Z" />
+  </svg>
+  </span>
+`,
+  { fragment: true }
+)
+
+const computedFields: ComputedFields = {
+  readingTime: { type: 'json', resolve: (doc) => readingTime(doc.body.raw) },
+  slug: {
+    type: 'string',
+    resolve: (doc) => doc._raw.flattenedPath.replace(/^.+?(\/)/, ''),
+  },
+  path: {
+    type: 'string',
+    resolve: (doc) => doc._raw.flattenedPath,
+  },
+  filePath: {
+    type: 'string',
+    resolve: (doc) => doc._raw.sourceFilePath,
+  },
+  toc: { type: 'json', resolve: (doc) => extractTocHeadings(doc.body.raw) },
+}
+
+/**
+ * Count the occurrences of all tags across blog posts and write to json file
+ */
+function createTagCount(allBlogs) {
+  const tagCount: Record<string, number> = {}
+  const refCount: Record<string, number> = {}
+  allBlogs.forEach((file) => {
+    if (file.tags && (!isProduction || file.draft !== true)) {
+      file.tags.forEach((tag) => {
+        const formattedTag = slug(tag)
+        if (formattedTag in tagCount) {
+          tagCount[formattedTag] += 1
+        } else {
+          tagCount[formattedTag] = 1
+        }
+      })
+    }
+  })
+  // write with explicit utf8 encoding
+  writeFileSync('./app/tag-data.json', JSON.stringify(tagCount, null, 2), 'utf8')
+  writeFileSync('./app/ref-data.json', JSON.stringify(refCount, null, 2), 'utf8')
+}
+
+function createSearchIndex(allBlogs) {
+  if (
+    siteMetadata?.search?.provider === 'kbar' &&
+    siteMetadata.search.kbarConfig.searchDocumentsPath
+  ) {
+    // sanitize and include only simple serializable fields to avoid binary/non-JSON content
+    const allContent = allCoreContent(sortPosts(allBlogs))
+    const sanitized = allContent.map((doc) => {
+      return {
+        title: String(doc.title || ''),
+        slug: String(doc._raw?.flattenedPath || doc.slug || ''),
+        summary: String(doc.summary || doc.excerpt || ''),
+        date: doc.date ? String(doc.date) : '',
+        tags: Array.isArray(doc.tags) ? doc.tags.map(String) : [],
+        authors: Array.isArray(doc.authors) ? doc.authors.map(String) : [],
+        image: Array.isArray(doc.images) && doc.images.length ? String(doc.images[0]) : siteMetadata.socialBanner || '',
+        path: String(doc.path),
+      }
+    })
+    const outPath = path.basename(siteMetadata.search.kbarConfig.searchDocumentsPath)
+    writeFileSync(`public/${outPath}`, JSON.stringify(sanitized, null, 2), 'utf8')
+    console.log(`Local search index generated to public/${outPath} (${sanitized.length} docs)`)
+  }
+}
+
+export const Blog = defineDocumentType(() => ({
+  name: 'Blog',
+  filePathPattern: 'blog/**/*.mdx',
+  contentType: 'mdx',
+  fields: {
+    title: { type: 'string', required: true },
+    date: { type: 'date', required: true },
+    tags: { type: 'list', of: { type: 'string' }, default: [] },
+    refs: { type: 'list', of: { type: 'string' }, default: [] },
+    lastmod: { type: 'date' },
+    duration: { type: 'string'},
+    draft: { type: 'boolean' },
+    summary: { type: 'string' },
+    images: { type: 'json' },
+    authors: { type: 'list', of: { type: 'string' } },
+    layout: { type: 'string' },
+    bibliography: { type: 'string' },
+    canonicalUrl: { type: 'string' },
+  },
+  computedFields: {
+    ...computedFields,
+    structuredData: {
+      type: 'json',
+      resolve: (doc) => ({
+        '@context': 'https://schema.org',
+        '@type': 'BlogPosting',
+        headline: doc.title,
+        datePublished: doc.date,
+        dateModified: doc.lastmod || doc.date,
+        description: doc.summary,
+        image: doc.images ? doc.images[0] : siteMetadata.socialBanner,
+        url: `${siteMetadata.siteUrl}/${doc._raw.flattenedPath}`,
+      }),
+    },
+  },
+}))
+
+export default makeSource({
+  contentDirPath: 'data',
+  documentTypes: [Blog],
+  mdx: {
+    cwd: process.cwd(),
+    // Provide an esbuildOptions mapper that merges incoming defaults and forces platform: 'node'
+    // This avoids "Could not resolve 'tty' / 'util' / 'os'" in Contentlayer's esbuild pipeline.
+    esbuildOptions: (options) => ({
+      ...options,
+      platform: 'node',
+    }),
+    remarkPlugins: [
+      remarkExtractFrontmatter,
+      remarkGfm,
+      remarkCodeTitles,
+      remarkMath,
+      remarkImgToJsx,
+      remarkAlert,
+    ],
+    rehypePlugins: [
+      [rehypeMermaid, { 
+        background: "transparent", 
+        className: "mermaid-diagram",
+       }
+      ],
+      [rehypePrettyCode, prettyCodeOptions],
+        rehypeSlug,
+      [
+      rehypeAutolinkHeadings,
+        {
+          behavior: 'prepend',
+          headingProperties: {
+            className: ['content-header'],
+          },
+          content: icon,
+        },
+      ],
+      rehypeKatex,
+      rehypeKatexNoTranslate,
+      [rehypeCitation, { path: path.join(root, 'data') }],
+      [rehypePrismPlus, { defaultLanguage: 'js', ignoreMissing: true }],
+      rehypePresetMinify,
+     
+    ],
+  },
+  onSuccess: async (importData) => {
+    const { allBlogs } = await importData()
+    createTagCount(allBlogs )
+    createSearchIndex(allBlogs )
+  },
+})
