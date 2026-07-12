@@ -107,7 +107,9 @@ const DialogFamily: React.FC<DialogFamilyProps> = ({ onDialogClosed }) => {
   const [submittedWrong, setSubmittedWrong] = useState(false)
   const [radioDisabled, setRadioDisabled] = useState(false)
   const [totalTarget, setTotalTarget] = useState(23)
+  const [isSimulating, setIsSimulating] = useState(false)
   const [prompt, setPrompt] = useState('')
+  const [defaultInput, setDefaultInput] = useState('23')
   const curGroups: CellObj =
     shuffledQArray.array.length > 0 ? shuffledQArray.array[ridx.index] : QArray[ridx.index]
   console.log('DialogFamily IN. ridx.index callback', ridx.index, onDialogClosed)
@@ -127,20 +129,29 @@ const DialogFamily: React.FC<DialogFamilyProps> = ({ onDialogClosed }) => {
     console.log('Form data:', data)
     setTotalTarget(Number(password))
     type Obj = { dup: number[]; cnt: number; odds: string }
-    const D = (await simulate(password)) as { nodup: number; array: Obj[] }
-    if (D.array.length > 0) {
-      setOpenLogIn(false)
-      setOpenRadio(true)
-      setPswdWrong(false)
-      QArray = []
-      for (const d of D.array) {
-        const s = '[' + d.dup.toString() + ']'
-        const cell = { dup: s, cnt: d.cnt, odds: d.odds }
-        QArray.push(cell)
+    setIsSimulating(true)
+    setDefaultInput(password)
+    setPswdWrong(false)
+    try {
+      const D = (await simulate(password)) as { nodup: number; array: Obj[] }
+      if (D.array.length > 0) {
+        setOpenLogIn(false)
+        setOpenRadio(true)
+        QArray = []
+        for (const d of D.array) {
+          const s = '[' + d.dup.toString() + ']'
+          const cell = { dup: s, cnt: d.cnt, odds: d.odds }
+          QArray.push(cell)
+        }
+        atLeastOneDupOdds = (100 - D.nodup).toFixed(2) + '%'
+      } else {
+        setPswdWrong(true)
       }
-      atLeastOneDupOdds = (100 - D.nodup).toFixed(2) + '%'
-    } else {
-      setPswdWrong(true)
+    } catch (error) {
+      console.log(error)
+    } finally {
+      setIsSimulating(false)
+      setDefaultInput(password)
     }
   }
 
@@ -165,7 +176,11 @@ const DialogFamily: React.FC<DialogFamilyProps> = ({ onDialogClosed }) => {
         </svg>
       )
     } else {
-      return
+      if (isSimulating === true) {
+        return <p> Wait! </p>
+      } else {
+        return
+      }
     }
   }
 
@@ -337,9 +352,10 @@ const DialogFamily: React.FC<DialogFamilyProps> = ({ onDialogClosed }) => {
                       </div>
                       <div className="mt-2">
                         <input
+                          defaultValue={defaultInput}
                           id="password"
                           name="password"
-                          type={eyeSlash ? 'password' : 'text'}
+                          type="text"
                           required
                           autoComplete="current-password"
                           className="block w-full rounded-md bg-white/5 px-3 py-1.5 text-base text-white outline-1 -outline-offset-1 outline-white/10 placeholder:text-gray-500 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-500 sm:text-sm/6"
@@ -444,7 +460,7 @@ const DialogFamily: React.FC<DialogFamilyProps> = ({ onDialogClosed }) => {
                           value="footer"
                           className="flex cursor-pointer items-center space-x-4"
                         >
-                          <div className="w-32 text-right">至少有一對同天</div>
+                          <div className="w-32 text-right">至少有一對</div>
                           <div className="w-32">{atLeastOneDupOdds}</div>
                         </Radio>
                       </RadioGroup>
