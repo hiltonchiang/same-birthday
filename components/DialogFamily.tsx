@@ -140,7 +140,9 @@ const DialogFamily: React.FC<DialogFamilyProps> = ({ onDialogClosed }) => {
         QArray = []
         for (const d of D.array) {
           const s = '[' + d.dup.toString() + ']'
-          const cell = { dup: s, cnt: d.cnt, odds: d.odds }
+          const maxChars = 17
+          const ts = s.length > maxChars ? s.slice(0, maxChars) + '...' : s
+          const cell = { dup: ts, cnt: d.cnt, odds: d.odds }
           QArray.push(cell)
         }
         atLeastOneDupOdds = (100 - D.nodup).toFixed(2) + '%'
